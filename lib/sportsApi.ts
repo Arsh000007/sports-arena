@@ -1,22 +1,9 @@
-// Wrapper around the API-Sports endpoints we use.
-//
-// API-Sports has separate hosts per sport:
-//   football → v3.football.api-sports.io
-//   cricket  → v1.cricket.api-sports.io
-//
-// All calls are server-side (this file is only imported from
-// /app/api routes) so the API key never reaches the browser.
-//
-// We also do simple in-memory caching: if the same URL was
-// fetched within CACHE_TTL_MS, return the cached response.
-// In production, replace this with Redis / Vercel KV.
-
 import type { Match } from './types';
 
-const KEY = process.env.API_SPORTS_KEY!;
-const CACHE_TTL_MS = 30_000; // 30 seconds — tune as your plan allows
+const KEY = process.env.API_SPORTS_KEY ?? '';
+const CACHE_TTL_MS = 30_000;
 
-type Cached = { at: number; data: any };
+type Cached = { at: number; data: unknown };
 const cache = new Map<string, Cached>();
 
 async function get(host: string, path: string, params: Record<string, string | number> = {}) {
@@ -30,7 +17,6 @@ async function get(host: string, path: string, params: Record<string, string | n
 
   const res = await fetch(url, {
     headers: { 'x-apisports-key': KEY },
-    // Next.js caches by default — we want fresh-ish:
     next: { revalidate: 30 },
   });
   if (!res.ok) {
@@ -41,18 +27,19 @@ async function get(host: string, path: string, params: Record<string, string | n
   return data;
 }
 
-// ============== FOOTBALL ==============
+function toDate(d: Date) {
+  return d.toISOString().split('T')[0];
+}
 
-export async function getLiveFootball(): Promise<Match[]> {
-  const data = await get('v3.football.api-sports.io', 'fixtures', { live: 'all' });
-  const fixtures = data.response ?? [];
-  return fixtures.map((f: any): Match => ({
+async function getFootballByDate(date: string): Promise<Match[]> {
+  const data: any = await get('v3.football.api-sports.io', 'fixtures', { date, timezone: 'UTC' });
+  return (data.response ?? []).map((f: any) => ({
     id: `football:${f.fixture.id}`,
-    sport: 'football',
-    competition: f.league?.name ?? 'Football',
-    round: f.league?.round,
-    status: f.fixture.status?.short === 'FT' ? 'FINAL' : 'LIVE',
-    minute: f.fixture.status?.elapsed ? `${f.fixture.status.elapsed}'` : undefined,
+    sport: 'football' as const,
+    competition: f.league.name,
+    round: f.league.round,
+    status: f.fixture.status.short === '1H' || f.fixture.status.short === '2H' || f.fixture.status.short === 'HT' ? 'LIVE' : f.fixture.status.short === 'FT' ? 'FT' : 'NS',
+    minute: f.fixture.status.elapsed ? `${f.fixture.status.elapsed}'` : undefined,
     kickoffISO: f.fixture.date,
     venue: f.fixture.venue?.name,
     home: {
@@ -73,66 +60,49 @@ export async function getLiveFootball(): Promise<Match[]> {
 }
 
 export async function getFootballFixture(fixtureId: number): Promise<Match | null> {
-  const data = await get('v3.football.api-sports.io', 'fixtures', { id: fixtureId });
+  const data: any = await get('v3.football.api-sports.io', 'fixtures', { id: fixtureId });
   const f = data.response?.[0];
   if (!f) return null;
   return {
     id: `football:${f.fixture.id}`,
     sport: 'football',
-    competition: f.league?.name ?? 'Football',
-    round: f.league?.round,
-    status: f.fixture.status?.short === 'FT' ? 'FINAL'
-          : f.fixture.status?.short === 'NS' ? 'SCHEDULED'
-          : 'LIVE',
-    minute: f.fixture.status?.elapsed ? `${f.fixture.status.elapsed}'` : undefined,
+    competition: f.league.name,
+    round: f.league.round,
+    status: f.fixture.status.short,
+    minute: f.fixture.status.elapsed ? `${f.fixture.status.elapsed}'` : undefined,
     kickoffISO: f.fixture.date,
     venue: f.fixture.venue?.name,
-    home: { id: f.teams.home.id, code: (f.teams.home.name ?? '').slice(0,3).toUpperCase(),
-            name: f.teams.home.name, logoUrl: f.teams.home.logo, score: f.goals.home ?? 0 },
-    away: { id: f.teams.away.id, code: (f.teams.away.name ?? '').slice(0,3).toUpperCase(),
-            name: f.teams.away.name, logoUrl: f.teams.away.logo, score: f.goals.away ?? 0 },
+    home: {
+      id: f.teams.home.id,
+      code: (f.teams.home.name ?? '').slice(0, 3).toUpperCase(),
+      name: f.teams.home.name,
+      logoUrl: f.teams.home.logo,
+      score: f.goals.home ?? 0,
+    },
+    away: {
+      id: f.teams.away.id,
+      code: (f.teams.away.name ?? '').slice(0, 3).toUpperCase(),
+      name: f.teams.away.name,
+      logoUrl: f.teams.away.logo,
+      score: f.goals.away ?? 0,
+    },
   };
 }
 
-// ============== CRICKET ==============
-
-export async function getLiveCricket(): Promise<Match[]> {
-  const data = await get('v1.cricket.api-sports.io', 'games', { live: 'all' });
-  const games = data.response ?? [];
-  return games.map((g: any): Match => ({
-    id: `cricket:${g.id}`,
-    sport: 'cricket',
-    competition: g.league?.name ?? 'Cricket',
-    status: g.status?.short === 'FT' ? 'FINAL' : 'LIVE',
-    minute: g.status?.long,
-    kickoffISO: g.date,
-    venue: g.venue,
-    home: {
-      id: g.teams.home.id,
-      code: (g.teams.home.name ?? '').slice(0, 3).toUpperCase(),
-      name: g.teams.home.name,
-      logoUrl: g.teams.home.logo,
-      score: g.scores?.home?.total ?? '—',
-    },
-    away: {
-      id: g.teams.away.id,
-      code: (g.teams.away.name ?? '').slice(0, 3).toUpperCase(),
-      name: g.teams.away.name,
-      logoUrl: g.teams.away.logo,
-      score: g.scores?.away?.total ?? '—',
-    },
-  }));
-}
-
-// ============== COMBINED ==============
-
 export async function getAllLive(): Promise<Match[]> {
-  const [football, cricket] = await Promise.allSettled([
-    getLiveFootball(),
-    getLiveCricket(),
+  const today = toDate(new Date());
+  const yesterday = toDate(new Date(Date.now() - 86400000));
+  const tomorrow = toDate(new Date(Date.now() + 86400000));
+
+  const [yd, td, tm] = await Promise.allSettled([
+    getFootballByDate(yesterday),
+    getFootballByDate(today),
+    getFootballByDate(tomorrow),
   ]);
+
   const out: Match[] = [];
-  if (football.status === 'fulfilled') out.push(...football.value);
-  if (cricket.status  === 'fulfilled') out.push(...cricket.value);
+  if (yd.status === 'fulfilled') out.push(...yd.value);
+  if (td.status === 'fulfilled') out.push(...td.value);
+  if (tm.status === 'fulfilled') out.push(...tm.value);
   return out;
 }
