@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { serverClient } from '@/lib/supabase';
 
 export default async function Header() {
-  const supabase = serverClient();
+  const supabase = await serverClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   return (
