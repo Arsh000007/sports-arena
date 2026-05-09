@@ -1,14 +1,8 @@
-// POST /api/follow      body: { sport, team_id, team_name }
-// DELETE /api/follow    body: { sport, team_id }
-// GET /api/follow       →  { teams: FollowedTeam[] }
-//
-// All routes require an authenticated Supabase user.
-
 import { NextRequest, NextResponse } from 'next/server';
 import { serverClient } from '@/lib/supabase';
 
 export async function GET() {
-  const supabase = serverClient();
+  const supabase = await serverClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -23,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = serverClient();
+  const supabase = await serverClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
@@ -41,7 +35,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const supabase = serverClient();
+  const supabase = await serverClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
