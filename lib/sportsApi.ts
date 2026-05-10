@@ -19,9 +19,7 @@ async function get(host: string, path: string, params: Record<string, string | n
     headers: { 'x-apisports-key': KEY },
     next: { revalidate: 30 },
   });
-  if (!res.ok) {
-    throw new Error(`API-Sports ${res.status}: ${await res.text().catch(() => '')}`);
-  }
+  if (!res.ok) throw new Error(`API-Sports ${res.status}`);
   const data = await res.json();
   cache.set(url, { at: Date.now(), data });
   return data;
@@ -31,14 +29,36 @@ function toDate(d: Date) {
   return d.toISOString().split('T')[0];
 }
 
+const COUNTRY_FLAGS: Record<string, string> = {
+  'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Spain': '🇪🇸', 'Germany': '🇩🇪', 'Italy': '🇮🇹',
+  'France': '🇫🇷', 'Portugal': '🇵🇹', 'Netherlands': '🇳🇱', 'Brazil': '🇧🇷',
+  'Argentina': '🇦🇷', 'USA': '🇺🇸', 'Mexico': '🇲🇽', 'Australia': '🇦🇺',
+  'Japan': '🇯🇵', 'South Korea': '🇰🇷', 'Turkey': '🇹🇷', 'Belgium': '🇧🇪',
+  'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Wales': '🏴󠁧󠁢󠁷󠁬󠁳󠁿', 'Saudi Arabia': '🇸🇦',
+  'UAE': '🇦🇪', 'India': '🇮🇳', 'China': '🇨🇳', 'Colombia': '🇨🇴',
+  'Chile': '🇨🇱', 'Uruguay': '🇺🇾', 'Greece': '🇬🇷', 'Poland': '🇵🇱',
+  'Russia': '🇷🇺', 'Ukraine': '🇺🇦', 'Croatia': '🇭🇷', 'Serbia': '🇷🇸',
+  'Romania': '🇷🇴', 'Czech Republic': '🇨🇿', 'Sweden': '🇸🇪', 'Norway': '🇳🇴',
+  'Denmark': '🇩🇰', 'Switzerland': '🇨🇭', 'Austria': '🇦🇹', 'Ecuador': '🇪🇨',
+  'Peru': '🇵🇪', 'Bolivia': '🇧🇴', 'Paraguay': '🇵🇾', 'Venezuela': '🇻🇪',
+  'World': '🌍',
+};
+
+export function getFlag(country?: string): string {
+  if (!country) return '';
+  return COUNTRY_FLAGS[country] ?? '🏳️';
+}
+
 async function getFootballByDate(date: string): Promise<Match[]> {
   const data: any = await get('v3.football.api-sports.io', 'fixtures', { date, timezone: 'UTC' });
   return (data.response ?? []).map((f: any) => ({
     id: `football:${f.fixture.id}`,
     sport: 'football' as const,
     competition: f.league.name,
+    country: f.league.country,
     round: f.league.round,
-    status: f.fixture.status.short === '1H' || f.fixture.status.short === '2H' || f.fixture.status.short === 'HT' ? 'LIVE' : f.fixture.status.short === 'FT' ? 'FT' : 'NS',
+    status: ['1H','2H','HT','ET','P'].includes(f.fixture.status.short) ? 'LIVE' :
+            f.fixture.status.short === 'FT' ? 'FT' : 'NS',
     minute: f.fixture.status.elapsed ? `${f.fixture.status.elapsed}'` : undefined,
     kickoffISO: f.fixture.date,
     venue: f.fixture.venue?.name,

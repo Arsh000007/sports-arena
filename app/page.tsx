@@ -1,6 +1,6 @@
 import MatchCard from '@/components/MatchCard';
 import SearchBar from '@/components/SearchBar';
-import { getAllLive } from '@/lib/sportsApi';
+import { getAllLive, getFlag } from '@/lib/sportsApi';
 import type { Match } from '@/lib/types';
 
 export const revalidate = 30;
@@ -20,14 +20,15 @@ export default async function HomePage() {
     error = e?.message ?? 'Failed to load matches';
   }
 
-  const popular = matches.filter(m => POPULAR_LEAGUES.includes(m.competition));
-  const rest = matches.filter(m => !POPULAR_LEAGUES.includes(m.competition));
+  const live = matches.filter(m => m.status === 'LIVE');
+  const popular = matches.filter(m => POPULAR_LEAGUES.includes(m.competition) && m.status !== 'LIVE');
+  const rest = matches.filter(m => !POPULAR_LEAGUES.includes(m.competition) && m.status !== 'LIVE');
 
-  const groups: Record<string, Match[]> = {};
+  const groups: Record<string, { country?: string; matches: Match[] }> = {};
   for (const m of rest) {
     const key = m.competition ?? 'Other';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(m);
+    if (!groups[key]) groups[key] = { country: m.country, matches: [] };
+    groups[key].matches.push(m);
   }
 
   return (
@@ -40,10 +41,21 @@ export default async function HomePage() {
         </div>
       )}
 
+      {live.length > 0 && (
+        <div className="mb-10">
+          <h2 className="font-display text-xl mb-4 pb-2 border-b border-line">
+            🔴 Live Now <span className="text-muted text-sm font-sans">{live.length} matches</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {live.map((m) => <MatchCard key={m.id} m={m} />)}
+          </div>
+        </div>
+      )}
+
       {popular.length > 0 && (
         <div className="mb-10">
-          <h2 className="font-display text-xl mb-4 text-accent border-b border-line pb-2">
-            ⭐ Featured Matches
+          <h2 className="font-display text-xl mb-4 pb-2 border-b border-line">
+            ⭐ Featured Leagues
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {popular.map((m) => <MatchCard key={m.id} m={m} />)}
@@ -59,10 +71,12 @@ export default async function HomePage() {
       {!error && matches.length === 0 && <p className="text-muted">No matches found.</p>}
 
       <div className="grid gap-8">
-        {Object.entries(groups).map(([competition, cms]) => (
+        {Object.entries(groups).map(([competition, { country, matches: cms }]) => (
           <div key={competition}>
-            <h2 className="font-display text-lg mb-3 border-b border-line pb-2 text-accent">
-              {competition}
+            <h2 className="font-display text-base mb-3 border-b border-line pb-2 flex items-center gap-2">
+              <span>{getFlag(country)}</span>
+              <span className="text-muted text-xs uppercase">{country}</span>
+              <span className="text-accent">{competition}</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {cms.map((m) => <MatchCard key={m.id} m={m} />)}
