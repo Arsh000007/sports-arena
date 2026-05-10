@@ -41,7 +41,9 @@ const COUNTRY_FLAGS: Record<string, string> = {
   'Romania': '🇷🇴', 'Czech Republic': '🇨🇿', 'Sweden': '🇸🇪', 'Norway': '🇳🇴',
   'Denmark': '🇩🇰', 'Switzerland': '🇨🇭', 'Austria': '🇦🇹', 'Ecuador': '🇪🇨',
   'Peru': '🇵🇪', 'Bolivia': '🇧🇴', 'Paraguay': '🇵🇾', 'Venezuela': '🇻🇪',
-  'World': '🌍',
+  'World': '🌍', 'Pakistan': '🇵🇰', 'Sri Lanka': '🇱🇰', 'Bangladesh': '🇧🇩',
+  'New Zealand': '🇳🇿', 'West Indies': '🏝️', 'Afghanistan': '🇦🇫',
+  'Zimbabwe': '🇿🇼', 'Ireland': '🇮🇪', 'Kenya': '🇰🇪',
 };
 
 export function getFlag(country?: string): string {
@@ -79,6 +81,44 @@ async function getFootballByDate(date: string): Promise<Match[]> {
   }));
 }
 
+async function getCricketMatches(): Promise<Match[]> {
+  const cricketKey = process.env.CRICKET_API_KEY ?? '';
+  if (!cricketKey) return [];
+  try {
+    const res = await fetch(
+      `https://api.cricapi.com/v1/currentMatches?apikey=${cricketKey}&offset=0`,
+      { next: { revalidate: 30 } }
+    );
+    const data = await res.json();
+    if (!data.data) return [];
+    return data.data.map((m: any) => ({
+      id: `cricket:${m.id}`,
+      sport: 'football' as const,
+      competition: m.name ?? 'Cricket',
+      country: 'World',
+      status: m.matchStarted && !m.matchEnded ? 'LIVE' : m.matchEnded ? 'FT' : 'NS',
+      kickoffISO: m.dateTimeGMT ?? new Date().toISOString(),
+      venue: m.venue,
+      home: {
+        id: 0,
+        code: (m.teams?.[0] ?? '???').slice(0, 3).toUpperCase(),
+        name: m.teams?.[0] ?? 'TBD',
+        logoUrl: undefined,
+        score: m.score?.find((s: any) => s.inning?.startsWith(m.teams?.[0]))?.r?.toString() ?? '—',
+      },
+      away: {
+        id: 1,
+        code: (m.teams?.[1] ?? '???').slice(0, 3).toUpperCase(),
+        name: m.teams?.[1] ?? 'TBD',
+        logoUrl: undefined,
+        score: m.score?.find((s: any) => s.inning?.startsWith(m.teams?.[1]))?.r?.toString() ?? '—',
+      },
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function getFootballFixture(fixtureId: number): Promise<Match | null> {
   const data: any = await get('v3.football.api-sports.io', 'fixtures', { id: fixtureId });
   const f = data.response?.[0];
@@ -114,15 +154,17 @@ export async function getAllLive(): Promise<Match[]> {
   const yesterday = toDate(new Date(Date.now() - 86400000));
   const tomorrow = toDate(new Date(Date.now() + 86400000));
 
-  const [yd, td, tm] = await Promise.allSettled([
+  const [yd, td, tm, cricket] = await Promise.allSettled([
     getFootballByDate(yesterday),
     getFootballByDate(today),
     getFootballByDate(tomorrow),
+    getCricketMatches(),
   ]);
 
   const out: Match[] = [];
   if (yd.status === 'fulfilled') out.push(...yd.value);
   if (td.status === 'fulfilled') out.push(...td.value);
   if (tm.status === 'fulfilled') out.push(...tm.value);
+  if (cricket.status === 'fulfilled') out.push(...cricket.value);
   return out;
 }
