@@ -1,7 +1,7 @@
 import MatchCard from '@/components/MatchCard';
 import { getAllLive } from '@/lib/sportsApi';
 
-export const revalidate = 30;
+export const revalidate = 0;
 
 export default async function HomePage() {
   let matches: Awaited<ReturnType<typeof getAllLive>> = [];
@@ -23,13 +23,13 @@ export default async function HomePage() {
 
       {error && (
         <div className="rounded-lg border border-line bg-panel p-4 text-sm">
-          <p className="text-live mb-2 font-semibold">Couldn&apos;t load data.</p>
+          <p className="text-live mb-2 font-semibold">Error:</p>
           <p className="text-muted">{error}</p>
         </div>
       )}
 
       {!error && matches.length === 0 && (
-        <p className="text-muted">No matches found.</p>
+        <p className="text-muted">No matches found. API_KEY set: {process.env.API_SPORTS_KEY ? 'YES' : 'NO'}</p>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
