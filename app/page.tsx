@@ -2,6 +2,7 @@ import MatchCard from '@/components/MatchCard';
 import SearchBar from '@/components/SearchBar';
 import { getAllLive, getFlag } from '@/lib/sportsApi';
 import type { Match } from '@/lib/types';
+import Link from 'next/link';
 
 export const revalidate = 30;
 
@@ -11,7 +12,12 @@ const POPULAR_LEAGUES = [
   'MLS', 'Copa Libertadores',
 ];
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: { tab?: string };
+}) {
+  const tab = searchParams.tab ?? 'live';
   let matches: Match[] = [];
   let error: string | null = null;
   try {
@@ -21,19 +27,43 @@ export default async function HomePage() {
   }
 
   const live = matches.filter(m => m.status === 'LIVE');
-  const popular = matches.filter(m => POPULAR_LEAGUES.includes(m.competition) && m.status !== 'LIVE');
-  const rest = matches.filter(m => !POPULAR_LEAGUES.includes(m.competition) && m.status !== 'LIVE');
+  const fixtures = matches.filter(m => m.status === 'NS');
+  const results = matches.filter(m => m.status === 'FT' || m.status === 'AET' || m.status === 'PEN');
+
+  const displayed = tab === 'fixtures' ? fixtures : tab === 'results' ? results : live;
 
   const groups: Record<string, { country?: string; matches: Match[] }> = {};
-  for (const m of rest) {
+  for (const m of displayed) {
     const key = m.competition ?? 'Other';
     if (!groups[key]) groups[key] = { country: m.country, matches: [] };
     groups[key].matches.push(m);
   }
 
+  const tabs = [
+    { id: 'live', label: `🔴 Live (${live.length})` },
+    { id: 'fixtures', label: `📅 Fixtures (${fixtures.length})` },
+    { id: 'results', label: `✅ Results (${results.length})` },
+  ];
+
   return (
     <>
       <SearchBar />
+
+      <div className="flex gap-2 mb-8 border-b border-line pb-0">
+        {tabs.map(t => (
+          <Link
+            key={t.id}
+            href={`/?tab=${t.id}`}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition ${
+              tab === t.id
+                ? 'bg-accent text-bg'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </div>
 
       {error && (
         <div className="rounded-lg border border-line bg-panel p-4 text-sm mb-4">
@@ -41,34 +71,9 @@ export default async function HomePage() {
         </div>
       )}
 
-      {live.length > 0 && (
-        <div className="mb-10">
-          <h2 className="font-display text-xl mb-4 pb-2 border-b border-line">
-            🔴 Live Now <span className="text-muted text-sm font-sans">{live.length} matches</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {live.map((m) => <MatchCard key={m.id} m={m} />)}
-          </div>
-        </div>
+      {!error && displayed.length === 0 && (
+        <p className="text-muted">No matches found.</p>
       )}
-
-      {popular.length > 0 && (
-        <div className="mb-10">
-          <h2 className="font-display text-xl mb-4 pb-2 border-b border-line">
-            ⭐ Featured Leagues
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {popular.map((m) => <MatchCard key={m.id} m={m} />)}
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-baseline gap-3 mb-6">
-        <h1 className="font-display text-2xl">All Matches</h1>
-        <span className="text-muted text-sm">{matches.length} matches</span>
-      </div>
-
-      {!error && matches.length === 0 && <p className="text-muted">No matches found.</p>}
 
       <div className="grid gap-8">
         {Object.entries(groups).map(([competition, { country, matches: cms }]) => (
